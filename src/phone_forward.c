@@ -468,6 +468,7 @@ PhoneNumbers * phfwdGet(PhoneForward const *pf, char const *num) {
     return get_last_number(num, last_depth, last);
 }
 
+// TODO w 2 części.
 /** @brief Wyznacza przekierowania na dany numer.
  * Wyznacza następujący ciąg numerów: jeśli istnieje numer @p x, taki że wynik
  * wywołania @p phfwdGet z numerem @p x zawiera numer @p num, to numer @p x
@@ -481,9 +482,7 @@ PhoneNumbers * phfwdGet(PhoneForward const *pf, char const *num) {
  * @return Wskaźnik na strukturę przechowującą ciąg numerów lub NULL, gdy nie
  *         udało się alokować pamięci.
  */
-PhoneNumbers * phfwdReverse(PhoneForward const *pf, char const *num) {
-    return NULL;
-}
+PhoneNumbers * phfwdReverse(PhoneForward const *pf, char const *num);
 
 /** @brief Usuwa strukturę.
  * Usuwa strukturę wskazywaną przez @p pnum. Nic nie robi, jeśli wskaźnik ten ma
