@@ -16,12 +16,18 @@
  * To jest struktura przechowująca przekierowania numerów telefonów.
  */
 struct PhoneForward;
+/**
+ * Typedef ułatwiający implementacje.
+ */
 typedef struct PhoneForward PhoneForward;
 
 /**
  * To jest struktura przechowująca ciąg numerów telefonów.
  */
 struct PhoneNumbers;
+/**
+ * Typedef ułatwiający implementacje.
+ */
 typedef struct PhoneNumbers PhoneNumbers;
 
 /** @brief Tworzy nową strukturę.
