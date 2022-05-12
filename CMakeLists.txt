@@ -24,9 +24,17 @@ set(SOURCE_FILES
     src/phone_forward.h
     src/phone_forward.c
     src/phone_forward_example.c)
+set(SOURCE_FILES_TEST
+    src/phone_forward.h
+    src/phone_forward.c
+    src/phone_forward_tests.c)
 
 # Wskazujemy plik wykonywalny.
 add_executable(phone_forward ${SOURCE_FILES})
+add_executable(phone_forward_test ${SOURCE_FILES_TEST})
+add_executable(phone_forward_instrumented ${SOURCE_FILES_TEST})
+
+target_link_options(phone_forward_instrumented PUBLIC -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc -Wl,--wrap=reallocarray -Wl,--wrap=free -Wl,--wrap=strdup -Wl,--wrap=strndup)
 
 # Dodajemy obsługę Doxygena: sprawdzamy, czy jest zainstalowany i jeśli tak to:
 find_package(Doxygen)
