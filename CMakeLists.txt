@@ -17,7 +17,7 @@ set(CMAKE_C_FLAGS "-std=c17 -Wall -Wextra -Wno-implicit-fallthrough")
 # Domyślne opcje dla wariantów Release i Debug są sensowne.
 # Jeśli to konieczne, ustawiamy tu inne.
 set(CMAKE_C_FLAGS_RELEASE "-O2 -DNDEBUG")
-set(CMAKE_C_FLAGS_DEBUG "-g")
+#set(CMAKE_C_FLAGS "-g")
 
 # Wskazujemy pliki źródłowe.
 set(SOURCE_FILES
