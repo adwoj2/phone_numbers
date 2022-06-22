@@ -924,6 +924,7 @@ PhoneNumbers * phfwdGetReverse(PhoneForward const *pf, char const *num) {
     PhoneNumbers* res = phn_create(NULL, 0); 
     if (res == NULL)
         return NULL;
+    // Sprawdzenie czy wyniki reverse należą do przeciwobrazu funkcji phfwdGet.
     for (size_t i = 0; i < reversed->size; i++) {
         const char* current_number = phnumGet(reversed, i);
         PhoneNumbers* forward_current_number_phn = phfwdGet(pf, current_number);
@@ -934,6 +935,4 @@ PhoneNumbers * phfwdGetReverse(PhoneForward const *pf, char const *num) {
     }
     phnumDelete(reversed);
     return res;
-
-
 }
