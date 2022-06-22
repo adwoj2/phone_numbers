@@ -13,7 +13,6 @@ Zaimplementowano funkcje umożliwiające podstawowe operacje na numerach telefon
 zdefiniowane w pliku phone_forward.h oraz potrzebne funkcje pomocnicze. Uzupełniono
 definicje struktur umieszczonych w phone_forward.h oraz dodano nowe, pomocnicze struktury.
 Zaimplementowano funkcję phfwdReverse oraz dodano możliwość obsługi numerów zawierających
-znaki * i # oznaczające odpowiednio 10 i 11.
-
-
+znaki * i # oznaczające odpowiednio 10 i 11. Dodano funkcję phfwdGetReverse do plików
+phone_forward.c i phone_forward.h. 
 */

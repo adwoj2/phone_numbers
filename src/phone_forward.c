@@ -7,7 +7,6 @@
  * @date 2022
  */
 #include <stdbool.h>
-#include <stddef.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -15,6 +14,11 @@
 #define HOW_MANY_NUMBERS 12 ///< Ilość cyfr wraz z dodatkowymi znakami.
 #define STAR_VALUE 10       ///< Wartość znaku *.
 #define HASH_VALUE 11       ///< Wartość znaku #.
+
+
+/*! \def TARGET
+    \brief Makro skracające zapis funkcji.
+*/
 
 /**
  * To jest struktura przechowująca przekierowania numerów telefonów.
@@ -133,13 +137,20 @@ static PhoneNumbers * phn_create(char** number, size_t size) {
 
     phn->size = size;
     phn->number = malloc(sizeof(char*) * size);
-    if (phn->number == NULL)
+    if (phn->number == NULL){
+        free(phn);
         return NULL;
+    }
 
     for (size_t i = 0; i < size; i++) {
         phn->number[i] = malloc(sizeof(char) * (strlen(number[i]) + 1));
-        if (phn->number[i] == NULL)
+        if (phn->number[i] == NULL) {
+            for (size_t j = 0; j < i; j++)
+                free(phn->number[j]);
+            free(phn->number);
+            free(phn);
             return NULL;
+        }
         strcpy(phn->number[i], number[i]);
     }
     return phn;
@@ -160,8 +171,10 @@ static PhoneFwd * phf_create_node(PhoneFwd* parent) {
     phf_ptr->forwarded_prefix = NULL;
     phf_ptr->parent = parent;
     phf_ptr->children = malloc(sizeof(PhoneForward*) * HOW_MANY_NUMBERS);
-    if (phf_ptr->children == NULL)
+    if (phf_ptr->children == NULL) {
+        free(phf_ptr);
         return NULL;
+    }
 
     for (int i = 0; i < HOW_MANY_NUMBERS; i++)
         phf_ptr->children[i] = NULL;
@@ -181,14 +194,46 @@ static PhoneBwd * phf_create_backward_node(PhoneBwd* parent) {
         return NULL;
 
     bwd_ptr->forwarded_prefix = phn_create(NULL, 0);
+    if (bwd_ptr->forwarded_prefix == NULL) {
+        free(bwd_ptr);
+        return NULL;
+    }
     bwd_ptr->parent = parent;
     bwd_ptr->children = malloc(sizeof(PhoneForward*) * HOW_MANY_NUMBERS);
-    if (bwd_ptr->children == NULL)
+    if (bwd_ptr->children == NULL) {
+        free(bwd_ptr->forwarded_prefix);
+        free(bwd_ptr);
         return NULL;
+    }
 
     for (int i = 0; i < HOW_MANY_NUMBERS; i++)
         bwd_ptr->children[i] = NULL;
     return bwd_ptr;
+}
+
+/**
+ * @brief Zwalnia pamięć zajmowaną przez pojedynczy węzeł w drzewie przekierowań.
+ * Zwalnia pamięć zajmowaną przez pojedynczy węzeł w drzewie przekierowań.
+ * @param[in] pfd_node - wskaźnik na węzeł, który ma zostać usunięty.
+ */
+static void free_node(PhoneFwd * pfd_node) {
+    if (pfd_node == NULL)
+        return;
+    free(pfd_node->forwarded_prefix);
+    free(pfd_node->children);
+    free(pfd_node);
+}
+
+/**
+ * @brief Zwalnia pamięć zajmowaną przez pojedynczy węzeł w odwrócoych drzewie przekierowań.
+ * Zwalnia pamięć zajmowaną przez pojedynczy węzeł w drzewie przekierowań.
+ * @param[in] pbd_node - wskaźnik na węzeł, który ma zostać usunięty.
+ */
+static void free_backward_node(PhoneBwd * pbd_node) {
+    if (pbd_node == NULL)
+        return;
+    phnumDelete(pbd_node->forwarded_prefix);
+    free(pbd_node->children);
 }
 
 /** @brief Tworzy nową strukturę.
@@ -203,63 +248,45 @@ PhoneForward * phfwdNew(void) {
 
     new_struct->tree = phf_create_node(NULL);
     new_struct->backward_tree = phf_create_backward_node(NULL);
+    if (new_struct->tree == NULL || new_struct->backward_tree == NULL) {
+        free_node(new_struct->tree);
+        free_backward_node(new_struct->backward_tree);
+        free(new_struct);
+        return NULL;
+    }
     return new_struct;
-}
-
-/**
- * @brief Zwalnia pamięć zajmowaną przez pojedynczy węzeł w drzewie przekierowań.
- * Zwalnia pamięć zajmowaną przez pojedynczy węzeł w drzewie przekierowań.
- * @param[in] pfd_node - wskaźnik na węzeł, który ma zostać usunięty.
- */
-static void free_node(PhoneFwd * pfd_node) {
-    free(pfd_node->forwarded_prefix);
-    free(pfd_node->children);
-    free(pfd_node);
-}
-
-/**
- * @brief Zwalnia pamięć zajmowaną przez pojedynczy węzeł w odwrócoych drzewie przekierowań.
- * Zwalnia pamięć zajmowaną przez pojedynczy węzeł w drzewie przekierowań.
- * @param[in] pbd_node - wskaźnik na węzeł, który ma zostać usunięty.
- */
-static void free_backward_node(PhoneBwd * pbd_node) {
-    phnumDelete(pbd_node->forwarded_prefix);
-    free(pbd_node->children);
 }
 
 /** @brief Usuwa pojedyncze odwrócone przekierowanie z drzewa odwróconych przekierowań.
  * Usuwa pojedyncze odwrócone przekierowanie z drzewa odwróconych przekierowań.
  * @param[in] pfd_backward_node – wskaźnik na korzeń drzewa odwróconych przekierowań;
- * @param[in] forward - wkaźnik na słowo na, które przekierowanie chcemy usunąć;
+ * @param[in] forward - wkaźnik na słowo, na które przekierowanie chcemy usunąć;
  * @param[in] to_remove - wkaźnik na napis reprezentując przekierowanie, które usuwamy.
  */
 static void delete_forward_from_bwd(PhoneBwd * pfd_backward_node, 
-                                    const char *forward, char* to_remove) {
+                                    const char *forward, const char* to_remove) {
     size_t iterator = 0;
 
     while (is_number(forward[iterator])) {
         int value = convert_to_number(forward[iterator]);
         if (pfd_backward_node->children[value] == NULL) 
-            return;
+            return; 
         pfd_backward_node = pfd_backward_node->children[value];
         iterator++;
     }
-
-#define TARGET pfd_backward_node->forwarded_prefix ///< Stała do skrócenia zapisu
+#define TARGET pfd_backward_node->forwarded_prefix  
     for (size_t i = 0; i < TARGET->size; i++)
         if (strcmp(TARGET->number[i], to_remove) == 0) {
             TARGET->size--;
             if (TARGET->size == 0)
                 free(TARGET->number[0]);
             else {
+                free(TARGET->number[i]);
                 if (TARGET->size != i) {
-                    TARGET->number[i] = realloc(TARGET->number[i], 
-                        strlen(TARGET->number[TARGET->size]) + 1);
-
-                    strcpy(TARGET->number[i], TARGET->number[TARGET->size]);
+                    TARGET->number[i] = TARGET->number[TARGET->size];
                 }
-                free(TARGET->number[TARGET->size]);
             }
+            break;
         }
 #undef TARGET
 }
@@ -294,7 +321,6 @@ static void remove_backward_tree(PhoneBwd * pfd_backward_node) {
 
             if (pfd_backward_node != NULL) {
                 while (pfd_backward_node->children[son_number] != son) {
-                    //printf("son_number%d\n", son_number);
                     son_number++;
                 }
                 pfd_backward_node->children[son_number] = NULL;
@@ -312,7 +338,7 @@ static void remove_backward_tree(PhoneBwd * pfd_backward_node) {
  * Jeśli dany węzeł miał rodzica to wskaźnik na usuwany węzeł w tablicy dzieci
  * jest zamieniany na wartość NULL. 
  * @param[in] pfd_node Węzeł, który należy usunąć.;
- * @param[in] pfd_backward_tree Wskaźnik na węzeł drzewa odwrotnych przekierowań;
+ * @param[in] pfd_backward_tree Wskaźnik na korzeń drzewa odwrotnych przekierowań;
  * @param[in] path Napis opisujący zwalniany węzeł.
  */
 static void delete_tree(PhoneFwd * pfd_node, PhoneBwd * pfd_backward_tree, 
@@ -320,10 +346,15 @@ static void delete_tree(PhoneFwd * pfd_node, PhoneBwd * pfd_backward_tree,
     if (pfd_node == NULL)
         return;
     /* Path musi być terminowane nullem bo gdyby nie było to pfd_node byłoby
-    równe NULL ze względu na działanie funkcji pomocniczej go_to_prefix */
+    równe NULL ze względu na działanie funkcji pomocniczej go_to_prefix. */
     size_t current_path_length = strlen(path) + 1, max_path_length = current_path_length * 2; 
-    char* current_path = malloc(sizeof(char) * max_path_length);
-    strcpy(current_path, (char*)path);
+    char* current_path = NULL;
+    if (pfd_backward_tree != NULL) {
+        current_path = malloc(sizeof(char) * max_path_length);
+        if (current_path == NULL) 
+            return;
+        strcpy(current_path, (char*)path);
+    }
 
     PhoneFwd * delete_border = pfd_node->parent;
     bool found_son = false;
@@ -334,13 +365,17 @@ static void delete_tree(PhoneFwd * pfd_node, PhoneBwd * pfd_backward_tree,
             if (pfd_node->children[i] != NULL) {
                 found_son = true;
                 pfd_node = pfd_node->children[i];
-                current_path_length++;
-                if (current_path_length > max_path_length) {
-                    max_path_length *= 2;
-                    current_path = realloc(current_path, sizeof(char) * max_path_length);
-                }
+                if (pfd_backward_tree != NULL) {
+                    current_path_length++;
+                    if (current_path_length > max_path_length) {
+                        max_path_length *= 2;
+                        current_path = realloc(current_path, sizeof(char) * max_path_length);
+                        if (current_path == NULL) 
+                            return;
+                    }
                 // Dodatkowe miejsce na znak '\0'.
                 current_path[current_path_length - 2] = convert_to_char(i);
+                }
                 break;
             }
         }
@@ -350,15 +385,12 @@ static void delete_tree(PhoneFwd * pfd_node, PhoneBwd * pfd_backward_tree,
             PhoneFwd* son = pfd_node;
             pfd_node = pfd_node->parent;
 
-            if (pfd_backward_tree != NULL) 
+            if (pfd_backward_tree != NULL)  {
                 if (son->forwarded_prefix != NULL) {
                     current_path[current_path_length - 1] = '\0';
                     delete_forward_from_bwd(pfd_backward_tree, son->forwarded_prefix, current_path);
                 }
             current_path_length--;
-            if (current_path_length <= max_path_length / 2) {
-                max_path_length /= 2;
-                current_path = realloc(current_path, sizeof(char) * max_path_length);
             }
 
             free_node(son);
@@ -425,45 +457,54 @@ bool check_parameters(PhoneForward *pf, char const *num1,
 }
 
 /** @brief Dodaje nowy napis do struktury PhoneNumbers.
- * Dodaje nowy napis do struktury PhoneNumbers.
+ * Dodaje nowy napis do struktury PhoneNumbers. Zwraca prawdę jeśli alokowanie
+ * pamięci się powiodło i fałsz w przeciwnym przypadku.
  * @param[in, out] phnum – wskaźnik na strukturę do której dodajemy napis;
  * @param[in] new - napis, który ma zostać dodany do struktury.
  */
-static void add_to_phnum(PhoneNumbers* phnum, const char* new) {
+static bool add_to_phnum(PhoneNumbers* phnum, const char* new) {
     // Poprawność argumentów została sprawdzona wcześniej.
     phnum->size++;
     phnum->number = realloc(phnum->number, sizeof(char*) * phnum->size);
-    phnum->number[phnum->size - 1] = malloc(sizeof(char) * strlen(new) + 1);
+    if (phnum->number == NULL){
+        phnum->size--;
+        return false;
+    }
+    phnum->number[phnum->size - 1] = malloc(sizeof(char) * (strlen(new) + 1));
+    if (phnum->number[phnum->size - 1] == NULL) {
+        free(phnum->number);
+        phnum->size--;
+        return false;
+    }
     strcpy(phnum->number[phnum->size - 1], new);
+    return true;
 }
 
 /**
  * @brief Tworzy nowy odwrócone przekierowanie i dodaje je do odpowiedniego drzewa.
  * Tworzy nowy węzeł drzewa odwróconych przekierowań. Przyjmuje napis 
  * reprezentujący numer przekierowany i ten, na który ma zostać przekierowany.
+ * Zwraca prawde, gdy alokowanie pamięci się powiodło i fałsz w przeciwnym przypadku.
  * @param[in] pbd_node - wskaźnik na korzeń drzewa przekierowań;
  * @param[in] num1 - napis przekierowywany; 
  * @param[in] num2 - napis, na który ma zostać dodane przekierowanie;
  * @return *Wskaźnik na nowo utworzony węzeł.
  */
-static void add_forward_to_backward_tree(PhoneBwd * pbd_node, char const *num1, char const *num2) {
+static bool add_forward_to_backward_tree(PhoneBwd * pbd_node, char const *num1, char const *num2) {
     // Poprawność danych została sprawdzona w funkcji phfwdAdd.
     int iterator = 0;
-    while (is_number(num2[iterator + 1])) {
+    while (is_number(num2[iterator])) {
         int value = convert_to_number(num2[iterator]);
         if (pbd_node->children[value] == NULL) 
             pbd_node->children[value] = phf_create_backward_node(pbd_node);
+        if (pbd_node->children[value] == NULL)
+            return false;
         pbd_node = pbd_node->children[value];
         iterator++;
     }
 
-    int value = convert_to_number(num2[iterator]);
-    if (pbd_node->children[value] == NULL)
-        pbd_node->children[value] = phf_create_backward_node(pbd_node);
-    pbd_node = pbd_node->children[value];
-
     // Dodanie kolejnej odwrotności przekierowania.
-    add_to_phnum(pbd_node->forwarded_prefix, num1);
+    return add_to_phnum(pbd_node->forwarded_prefix, num1);
 }
 
 /** @brief Dodaje przekierowanie.
@@ -493,10 +534,9 @@ bool phfwdAdd(PhoneForward *pf, char const *num1, char const *num2) {
     if (!check_parameters(pf, num1, num2, &iterator))
         return false;
     // Dodatkowe miejsce na '\0'.
-    forwarded = malloc (sizeof(char) * (iterator + 1)); 
+    forwarded = malloc(sizeof(char) * (iterator + 1)); 
     if (forwarded == NULL)
         return false;
-
     iterator = 0;
     while (is_number(num2[iterator])) {
         forwarded[iterator] = num2[iterator];
@@ -514,6 +554,10 @@ bool phfwdAdd(PhoneForward *pf, char const *num1, char const *num2) {
         int value = convert_to_number(num1[iterator]);
         if (pfd_node->children[value] == NULL) 
             pfd_node->children[value] = phf_create_node(pfd_node);
+        if (pfd_node->children[value] == NULL) {
+            free(forwarded);
+            return false;
+        }   
         pfd_node = pfd_node->children[value];
         iterator++;
     }
@@ -524,15 +568,18 @@ bool phfwdAdd(PhoneForward *pf, char const *num1, char const *num2) {
     int value = convert_to_number(num1[iterator]);
     if (pfd_node->children[value] == NULL)
         pfd_node->children[value] = phf_create_node(pfd_node);
+    if (pfd_node->children[value] == NULL) {
+        free(forwarded);
+        return false;
+    }   
     pfd_node = pfd_node->children[value];
 
     if (pfd_node->forwarded_prefix != NULL) {
-        delete_forward_from_bwd(pf->backward_tree, num1, pfd_node->forwarded_prefix);
+        delete_forward_from_bwd(pf->backward_tree, pfd_node->forwarded_prefix, num1);
         free(pfd_node->forwarded_prefix);
     }
     pfd_node->forwarded_prefix = forwarded;
-    add_forward_to_backward_tree(pf->backward_tree, num1, num2);
-    return true;
+    return add_forward_to_backward_tree(pf->backward_tree, num1, num2);
 }
 
 /**
@@ -633,7 +680,7 @@ static PhoneNumbers * get_last_number(const char* num, size_t last_depth, char* 
  * numer nie został przekierowany, to wynikiem jest ciąg zawierający ten numer.
  * Jeśli podany napis nie reprezentuje numeru, wynikiem jest pusty ciąg.
  * Alokuje strukturę @p PhoneNumbers, która musi być zwolniona za pomocą
- * funkcji @ref phnumDelete.
+ * funkcji @ref phnumDelete. Zwraca wartość NULL dla @p pf o wartości NULL.
  * @param[in] pf  – wskaźnik na strukturę przechowującą przekierowania numerów;
  * @param[in] num – wskaźnik na napis reprezentujący numer.
  * @return Wskaźnik na strukturę przechowującą ciąg numerów lub NULL, gdy nie
@@ -682,16 +729,17 @@ static int string_comparator(const void* first, const void* second) {
     const char* a = *(const char**)first;
     const char* b = *(const char**)second;
 
-    for (size_t i = 0; i < strlen(a); i++) {
+    for (size_t i = 0; a[i]; i++) {
         if (convert_to_number(a[i]) > convert_to_number(b[i]))
             return 1;
         else if (convert_to_number(a[i]) < convert_to_number(b[i]))
             return -1;
     }
+    size_t end_index = strlen(a);
     // Porównanie znaków końca napisu.
-    if (convert_to_number(a[strlen(a)]) > convert_to_number(b[strlen(a)]))
+    if (convert_to_number(b[end_index]) > convert_to_number(b[end_index]))
         return 1;
-    if (convert_to_number(a[strlen(a)]) < convert_to_number(b[strlen(a)]))
+    if (convert_to_number(a[end_index]) < convert_to_number(b[end_index]))
         return -1;
     return 0;
 }
@@ -699,17 +747,20 @@ static int string_comparator(const void* first, const void* second) {
 /** @brief Umieszcza nowe odwrotne przekierowanie w strukturze PhoneNumbers.
  * Funkcja pomocnicza która mieszcza nowe odwrotne przekierowanie w strukturze 
  * PhoneNumbers. Przyjmuje przekierowywany prefiks, nieprzekierowany fragment 
- * słowa oraz jego długość i łączy je w pojedynczy napis.
+ * słowa oraz jego długość i łączy je w pojedynczy napis. Zwraca prawdę
+ * jeśli alokacja pamięci się uda i fałsz w przeciwnym przypadku.
  * @param[in, out] result  – wskaźnik na strukturę przechowującą odwrotne przekierowania numerów;
  * @param[in] to_add – wskaźnik na strukturę przechowującą dodawany numer;
  * @param[in] rest – nieprzekierowywana część słowa.
  */
-static void insert_to_phnum(PhoneNumbers *result, PhoneNumbers *to_add,
+static bool insert_to_phnum(PhoneNumbers *result, PhoneNumbers *to_add,
                             char* rest) {
     int target_bonus_len = strlen(rest) + 1; // +1 na znak końca napisu
     size_t result_current_size = result->size;
     result->size += to_add->size;
     result->number = realloc(result->number, sizeof(char*) * result->size);
+    if (result->number == NULL)
+        return false;
     bool repeated = false;
 
     for (size_t i = 0; i < to_add->size; i++) {
@@ -718,7 +769,9 @@ static void insert_to_phnum(PhoneNumbers *result, PhoneNumbers *to_add,
         for (size_t j = 0; j < result_current_size; j++) {
             if (strcmp(result->number[j], to_add->number[i]) == 0) {
                 result->size--;
-                result->number = realloc (result->number, sizeof(char*) * result->size);
+                result->number = realloc(result->number, sizeof(char*) * result->size);
+                if (result->number == NULL)
+                    return false;
                 repeated = true;
                 break;
             }
@@ -727,14 +780,20 @@ static void insert_to_phnum(PhoneNumbers *result, PhoneNumbers *to_add,
             continue;
 
         result_current_size++;
+        size_t new_num_len = strlen(to_add->number[i]);
         result->number[result_current_size - 1] = 
-            malloc(sizeof(char) * (target_bonus_len + strlen(to_add->number[i])));
+            malloc(sizeof(char) * (target_bonus_len + new_num_len));
+        if (result->number[result_current_size - 1] == NULL) {
+            
+            return false; 
+        }
 
         // Kopiowanie przekierowanego prefiksu.
         strcpy(result->number[result_current_size - 1], to_add->number[i]);
         // Kopiowanie sufiksu pozostałego słowa.
-        strcpy(result->number[result_current_size - 1] + strlen(to_add->number[i]), rest);
+        strcpy(result->number[result_current_size - 1] + new_num_len, rest);
     }
+    return true;
 }
 
 /** @brief Wyznacza przekierowania na dany numer.
@@ -767,6 +826,8 @@ PhoneNumbers * phfwdReverse(PhoneForward const *pf, char const *num){
 
     iterator = 0;
     PhoneNumbers *result = phn_create(NULL, 0);
+    if (result == NULL)
+        return NULL;
 
     while (is_number(num[iterator])) {
         int value = convert_to_number(num[iterator]);
@@ -774,16 +835,23 @@ PhoneNumbers * phfwdReverse(PhoneForward const *pf, char const *num){
             break;
         
         probe = probe->children[value];
-        if (probe->forwarded_prefix->size != 0) {
-            //printf("%ld\n", probe->forwarded_prefix->size);
-            insert_to_phnum(result, probe->forwarded_prefix, (char*)(num + iterator + 1));
-        }
+        if (probe->forwarded_prefix->size != 0) 
+            if (!insert_to_phnum(result, probe->forwarded_prefix, (char*)(num + iterator + 1))) {
+                phnumDelete(result);
+                return NULL;
+            }
         iterator++;
     }
-
     PhoneNumbers* itself = phn_create((char**)&num, 1);
-    // Dla oryginalnego słowa nie trzeba nic dodawać na koniec.
-    insert_to_phnum(result, itself, "");
+    if (itself == NULL) {
+        phnumDelete(result);
+        return NULL;
+    }
+    if(!insert_to_phnum(result, itself, "")) {
+        phnumDelete(itself);
+        phnumDelete(result);
+        return NULL;
+    }
 
     phnumDelete(itself);
 
@@ -823,4 +891,49 @@ char const * phnumGet(PhoneNumbers const *pnum, size_t idx) {
         return NULL;
 
     return pnum->number[idx];
+}
+
+/** @brief Wyznacza przekierowania na dany numer.
+ * Wyznacza następujący ciąg numerów: jeśli istnieje numer @p x, taki że jeśli
+ * wywołamy funkcję @ref phfwdGet na numerze @p x i w wyniku otrzymamy numer
+ * @p num, to numer @p x należy do wyniku wywołania @ref phfwdGetReverse 
+ * z numerem @p num. Dodatkowo ciągwynikowy zawsze zawiera
+ * też numer @p num. Wynikowe numery są posortowane
+ * leksykograficznie i nie mogą się powtarzać. Jeśli podany napis nie
+ * reprezentuje numeru, wynikiem jest pusty ciąg. Alokuje strukturę
+ * @p PhoneNumbers, która musi być zwolniona za pomocą funkcji @ref phnumDelete.
+ * @param[in] pf  – wskaźnik na strukturę przechowującą przekierowania numerów;
+ * @param[in] num – wskaźnik na napis reprezentujący numer.
+ * @return Wskaźnik na strukturę przechowującą ciąg numerów lub NULL, gdy nie
+ *         udało się alokować pamięci.
+ */
+PhoneNumbers * phfwdGetReverse(PhoneForward const *pf, char const *num) {
+    if (pf == NULL)
+        return NULL;
+    if (num == NULL)
+        return phn_create(NULL, 0);
+
+    int iterator = 0;
+    // Sprawdzenie czy numer reprezentuje liczbe
+    while (is_number(num[iterator]))
+        iterator++;
+    if (num[iterator] != '\0' || iterator == 0)
+        return phn_create(NULL, 0);
+
+    PhoneNumbers* reversed = phfwdReverse(pf, num);
+    PhoneNumbers* res = phn_create(NULL, 0); 
+    if (res == NULL)
+        return NULL;
+    for (size_t i = 0; i < reversed->size; i++) {
+        const char* current_number = phnumGet(reversed, i);
+        PhoneNumbers* forward_current_number_phn = phfwdGet(pf, current_number);
+        const char* forward_current_number = phnumGet(forward_current_number_phn, 0);
+        if (strcmp(forward_current_number, num) == 0)
+            add_to_phnum(res, current_number);
+        phnumDelete(forward_current_number_phn);
+    }
+    phnumDelete(reversed);
+    return res;
+
+
 }
