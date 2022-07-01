@@ -10,6 +10,7 @@
 
 #include <malloc.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +20,7 @@
 // Gdzieś musi być zdefiniowany magiczny napis służący do spawdzania, czy
 // program w całości wykonał się poprawnie.
 extern char quite_long_magic_string[];
+char quite_long_magic_string[] = "MAGIC";
 
 // Możliwe wyniki testu
 #define PASS 0
@@ -34,6 +36,11 @@ extern char quite_long_magic_string[];
   PhoneForward *p = phfwdNew(); \
   if (p == NULL)                \
     return FAIL
+
+// Utworzenie nowej bazy przekierowań
+#define REINIT(p)    \
+  phfwdDelete(pf);   \
+  N(p = phfwdNew());
 
 // Koniec testu
 #define CLEAN(p)  \
@@ -103,6 +110,7 @@ extern char quite_long_magic_string[];
    Q(_p, 0);         \
    Q(_p, 1);         \
    Q(_p, 9999);      \
+   Q(_p, SIZE_MAX);  \
    phnumDelete(_p);  \
   } while (0)
 
@@ -116,6 +124,17 @@ extern char quite_long_magic_string[];
     phnumDelete(_p);        \
   } while (0)
 
+// Oczekiwane przekierowanie z A na B i dodatkowe sprawdzenie indeksu SIZE_MAX
+#define CHECK_SIZE(p, A, B) \
+  do {                      \
+    PhoneNumbers *_p;       \
+    N(_p = phfwdGet(p, A)); \
+    R(_p, 0, B);            \
+    Q(_p, 1);               \
+    Q(_p, SIZE_MAX);        \
+    phnumDelete(_p);        \
+  } while (0)
+
 // Oczekiwane odwrotne przekierowania z A
 #define RCHCK(p, A, ...)                     \
   do {                                       \
@@ -125,6 +144,45 @@ extern char quite_long_magic_string[];
     for (size_t _k = 0; _k < SIZE(_r); ++_k) \
       R(_p, _k, _r[_k]);                     \
     Q(_p, SIZE(_r));                         \
+    phnumDelete(_p);                         \
+  } while (0)
+
+// Oczekiwane odwrotne przekierowania z A i dodatkowe sprawdzenie indeksu SIZE_MAX
+#define RCHCK_SIZE(p, A, ...)                \
+  do {                                       \
+    PhoneNumbers *_p;                        \
+    N(_p = phfwdReverse(p, A));              \
+    char const *_r[] = {__VA_ARGS__};        \
+    for (size_t _k = 0; _k < SIZE(_r); ++_k) \
+      R(_p, _k, _r[_k]);                     \
+    Q(_p, SIZE(_r));                         \
+    Q(_p, SIZE_MAX);                         \
+    phnumDelete(_p);                         \
+  } while (0)
+
+// Oczekiwane odwrotne przekierowania z A
+#define GRCHK(p, A, ...)                     \
+  do {                                       \
+    PhoneNumbers *_p;                        \
+    N(_p = phfwdGetReverse(p, A));           \
+    char const *_r[] = {__VA_ARGS__};        \
+    for (size_t _k = 0; _k < SIZE(_r); ++_k) \
+      R(_p, _k, _r[_k]);                     \
+    Q(_p, SIZE(_r));                         \
+    phnumDelete(_p);                         \
+  } while (0)
+
+
+// Oczekiwane odwrotne przekierowania z A i dodatkowe sprawdzenie indeksu SIZE_MAX
+#define GRCHK_SIZE(p, A, ...)                \
+  do {                                       \
+    PhoneNumbers *_p;                        \
+    N(_p = phfwdGetReverse(p, A));           \
+    char const *_r[] = {__VA_ARGS__};        \
+    for (size_t _k = 0; _k < SIZE(_r); ++_k) \
+      R(_p, _k, _r[_k]);                     \
+    Q(_p, SIZE(_r));                         \
+    Q(_p, SIZE_MAX);                         \
     phnumDelete(_p);                         \
   } while (0)
 
@@ -179,6 +237,13 @@ static int wrong_arguments(void) {
   F(phfwdAdd(pf, "@", "123"));
   F(phfwdAdd(pf, "0", "0"));
 
+  F(phfwdAdd(NULL, "1", "2"));
+  F(phfwdAdd(NULL, NULL, "2"));
+  F(phfwdAdd(NULL, NULL, "abc"));
+  F(phfwdAdd(NULL, "1", NULL));
+  F(phfwdAdd(NULL, "abc", NULL));
+  F(phfwdAdd(NULL, NULL, NULL));
+
   E(phfwdGet(pf, ""));
   E(phfwdGet(pf, "e"));
   E(phfwdGet(pf, " "));
@@ -207,6 +272,25 @@ static int wrong_arguments(void) {
   E(phfwdReverse(pf, ">"));
   E(phfwdReverse(pf, "@"));
 
+  Z(phfwdReverse(NULL, "123"));
+  Z(phfwdReverse(NULL, NULL));
+  Z(phfwdReverse(NULL, "abc"));
+
+  E(phfwdGetReverse(pf, ""));
+  E(phfwdGetReverse(pf, "e"));
+  E(phfwdGetReverse(pf, " "));
+  E(phfwdGetReverse(pf, "7f"));
+  E(phfwdGetReverse(pf, "/"));
+  E(phfwdGetReverse(pf, "%"));
+  E(phfwdGetReverse(pf, ":"));
+  E(phfwdGetReverse(pf, ";"));
+  E(phfwdGetReverse(pf, ">"));
+  E(phfwdGetReverse(pf, "@"));
+
+  Z(phfwdGetReverse(NULL, "123"));
+  Z(phfwdGetReverse(NULL, NULL));
+  Z(phfwdGetReverse(NULL, "abc"));
+
   phfwdRemove(pf, "");
   phfwdRemove(pf, "g");
   phfwdRemove(pf, " ");
@@ -217,6 +301,16 @@ static int wrong_arguments(void) {
   phfwdRemove(pf, ";");
   phfwdRemove(pf, ">");
   phfwdRemove(pf, "@");
+
+  phfwdRemove(NULL, "1");
+
+  phfwdDelete(NULL);
+
+  phnumDelete(NULL);
+
+  Z(phnumGet(NULL, 0));
+  Z(phnumGet(NULL, 1));
+  Z(phnumGet(NULL, SIZE_MAX));
 
   CLEAN(pf);
 }
@@ -235,8 +329,11 @@ static int malicious_arguments(void) {
   memset(mem, 'A', page_size);
 
   F(phfwdAdd(pf, mem, mem));
+  F(phfwdAdd(pf, mem, "1"));
+  F(phfwdAdd(pf, "2", mem));
   E(phfwdGet(pf, mem));
   E(phfwdReverse(pf, mem));
+  E(phfwdGetReverse(pf, mem));
   phfwdRemove(pf, mem);
 
   if (munmap(mem, page_size) < 0)
@@ -471,19 +568,18 @@ static int various_ops(void) {
   T(phfwdAdd(pf, "23", "4"));
   RCHCK(pf, "434", "2334", "234", "434");
 
-  phfwdDelete(pf);
-  N(pf = phfwdNew());
+  REINIT(pf);
 
   T(phfwdAdd(pf, "123", "76"));
-  CHECK(pf, "1234581", "764581");
-  CHECK(pf, "7581", "7581");
-  RCHCK(pf, "7581", "7581");
+  CHECK_SIZE(pf, "1234581", "764581");
+  CHECK_SIZE(pf, "7581", "7581");
+  RCHCK_SIZE(pf, "7581", "7581");
 
   CLEAN(pf);
 }
 
 // Dużo operacji na strukturze
-static int many_ops() {
+static int many_ops(void) {
   #define xfrom   00000
   #define xto     99999
   #define div0    1
@@ -671,8 +767,7 @@ static int twelve_digits(void) {
   T(phfwdAdd(pf, "#3", "4"));
   RCHCK(pf, "434", "434", "#334", "#34");
 
-  phfwdDelete(pf);
-  N(pf = phfwdNew());
+  REINIT(pf);
 
   T(phfwdAdd(pf, "1#3", "76"));
   CHECK(pf, "1#3458*", "76458*");
@@ -692,11 +787,13 @@ static int cycle(void) {
   CHECK(pf, "124", "123");
   RCHCK(pf, "123", "123", "124");
   RCHCK(pf, "124", "123", "124");
+  GRCHK(pf, "123", "124");
+  GRCHK(pf, "124", "123");
 
   CLEAN(pf);
 }
 
-// Test sortowania wyniku phfwdReverse
+// Test sortowania wyniku phfwdReverse i phfwdGetReverse
 static int sort(void) {
   INIT(pf);
 
@@ -713,6 +810,79 @@ static int sort(void) {
   T(phfwdAdd(pf, "0#7", "07"));
   T(phfwdAdd(pf, "087", "07"));
   RCHCK(pf, "07", "007", "017", "027", "037", "047", "057", "067", "07", "077", "087", "097", "0*7", "0#7");
+  GRCHK(pf, "07", "007", "017", "027", "037", "047", "057", "067", "07", "077", "087", "097", "0*7", "0#7");
+
+  CLEAN(pf);
+}
+
+// Testy funkcji phfwdGetReverse
+static int get_reverse(void) {
+  INIT(pf);
+
+  T(phfwdAdd(pf, "1", "2"));
+  T(phfwdAdd(pf, "3", "4"));
+  T(phfwdAdd(pf, "5", "6"));
+  T(phfwdAdd(pf, "7", "8"));
+  T(phfwdAdd(pf, "9", "10"));
+  T(phfwdAdd(pf, "11", "12"));
+  T(phfwdAdd(pf, "13", "14"));
+  T(phfwdAdd(pf, "15", "16"));
+  GRCHK(pf, "12", "11");
+
+  REINIT(pf);
+
+  T(phfwdAdd(pf, "1", "2"));
+  T(phfwdAdd(pf, "1", "3"));
+  T(phfwdAdd(pf, "1", "4"));
+  T(phfwdAdd(pf, "1", "5"));
+  T(phfwdAdd(pf, "1", "6"));
+  T(phfwdAdd(pf, "1", "7"));
+  T(phfwdAdd(pf, "1", "8"));
+  T(phfwdAdd(pf, "1", "9"));
+  T(phfwdAdd(pf, "1", "10"));
+  T(phfwdAdd(pf, "1", "11"));
+  GRCHK(pf, "11", "1");
+
+  phfwdRemove(pf, "1");
+
+  T(phfwdAdd(pf, "1", "2"));
+  T(phfwdAdd(pf, "2", "3"));
+  T(phfwdAdd(pf, "3", "4"));
+  T(phfwdAdd(pf, "4", "5"));
+  T(phfwdAdd(pf, "5", "6"));
+  T(phfwdAdd(pf, "6", "7"));
+  T(phfwdAdd(pf, "7", "8"));
+  T(phfwdAdd(pf, "8", "9"));
+  T(phfwdAdd(pf, "9", "*"));
+  T(phfwdAdd(pf, "*", "#"));
+  T(phfwdAdd(pf, "#", "0"));
+  T(phfwdAdd(pf, "0", "1"));
+  GRCHK(pf, "5", "4");
+
+  REINIT(pf);
+
+  T(phfwdAdd(pf, "123", "9"));
+  T(phfwdAdd(pf, "123456", "777777"));
+  T(phfwdAdd(pf, "431", "432"));
+  T(phfwdAdd(pf, "432", "433"));
+
+  GRCHK(pf, "432", "431");
+  GRCHK(pf, "433", "432", "433");
+  GRCHK(pf, "987654321", "12387654321", "987654321");
+
+  phfwdRemove(pf, "12");
+
+  GRCHK(pf, "987654321", "987654321");
+
+  T(phfwdAdd(pf, "567", "0"));
+  T(phfwdAdd(pf, "5678", "08"));
+
+  GRCHK(pf, "08", "08", "5678");
+
+  T(phfwdAdd(pf, "12", "123"));
+  T(phfwdAdd(pf, "2", "4"));
+  T(phfwdAdd(pf, "23", "4"));
+  GRCHK(pf, "434", "2334", "434");
 
   CLEAN(pf);
 }
@@ -995,6 +1165,131 @@ static unsigned long alloc_fail_test_2(void) {
   return visited;
 }
 
+// Test reakcji implementacji na niepowodzenie alokacji pamięci
+// w funkcjach phfwdNew, phfwdAdd, phfwdGetReverse
+static unsigned long alloc_fail_test_3(void) {
+  unsigned long visited = 0;
+  PhoneForward *pf = NULL;
+  PhoneNumbers *pn = NULL;
+  char const   *ps = NULL;
+
+  if ((pf = phfwdNew()) != NULL) {
+    visited |= V(1, 0);
+  }
+  else if ((pf = phfwdNew()) != NULL) {
+    visited |= V(2, 0);
+  }
+  else {
+    visited |= V(4, 0);
+    return visited;
+  }
+
+  if ((pn = phfwdGetReverse(pf, "0123456789*#")) != NULL) {
+    visited |= V(1, 1);
+  }
+  else if ((pn = phfwdGetReverse(pf, "0123456789*#")) != NULL) {
+    visited |= V(2, 1);
+  }
+  else {
+    visited |= V(4, 1);
+    phfwdDelete(pf);
+    return visited;
+  }
+
+  if ((ps = phnumGet(pn, 0)) != NULL)
+    visited |= V(1, 2);
+  else if ((ps = phnumGet(pn, 0)) != NULL)
+    visited |= V(2, 2);
+  else
+    visited |= V(4, 2);
+
+  if  (ps != NULL && strcmp(ps, "0123456789*#") != 0)
+    visited |= V(4, 2);
+
+  if (phnumGet(pn, 1) == NULL)
+    visited |= V(1, 3);
+  else
+    visited |= V(4, 3);
+
+  phnumDelete(pn);
+  pn = NULL;
+
+  if (phfwdAdd(pf, "*#5", "*#8")) {
+    visited |= V(1, 4);
+  }
+  else if (phfwdAdd(pf, "*#5", "*#8")) {
+    visited |= V(2, 4);
+  }
+  else {
+    visited |= V(4, 4);
+    phfwdDelete(pf);
+    return visited;
+  }
+
+  if (phfwdAdd(pf, "*#2", "*#8")) {
+    visited |= V(1, 5);
+  }
+  else if (phfwdAdd(pf, "*#2", "*#8")) {
+    visited |= V(2, 5);
+  }
+  else {
+    visited |= V(4, 5);
+    phfwdDelete(pf);
+    return visited;
+  }
+
+  if ((pn = phfwdGetReverse(pf, "*#8")) != NULL) {
+    visited |= V(1, 6);
+  }
+  else if ((pn = phfwdGetReverse(pf, "*#8")) != NULL) {
+    visited |= V(2, 6);
+  }
+  else {
+    visited |= V(4, 6);
+    phfwdDelete(pf);
+    return visited;
+  }
+
+  if ((ps = phnumGet(pn, 0)) != NULL)
+    visited |= V(1, 7);
+  else if ((ps = phnumGet(pn, 0)) != NULL)
+    visited |= V(2, 7);
+  else
+    visited |= V(4, 7);
+
+  if (ps != NULL && strcmp(ps, "*#2") != 0)
+    visited |= V(4, 7);
+
+  if ((ps = phnumGet(pn, 1)) != NULL)
+    visited |= V(1, 8);
+  else if ((ps = phnumGet(pn, 1)) != NULL)
+    visited |= V(2, 8);
+  else
+    visited |= V(4, 8);
+
+  if (ps != NULL && strcmp(ps, "*#5") != 0)
+    visited |= V(4, 8);
+
+  if ((ps = phnumGet(pn, 2)) != NULL)
+    visited |= V(1, 9);
+  else if ((ps = phnumGet(pn, 2)) != NULL)
+    visited |= V(2, 9);
+  else
+    visited |= V(4, 9);
+
+  if (ps != NULL && strcmp(ps, "*#8") != 0)
+    visited |= V(4, 9);
+
+  if (phnumGet(pn, 3) == NULL)
+    visited |= V(1, 10);
+  else
+    visited |= V(4, 10);
+
+  phnumDelete(pn);
+  phfwdDelete(pf);
+  return visited;
+}
+
 // Sprawdzenie reakcji implementacji na niepowodzenie alokacji pamięci
 static int memory_test(unsigned long (* test_function)(void)) {
   unsigned fail, pass;
@@ -1034,6 +1329,10 @@ static int alloc_fail_2(void) {
   return memory_test(alloc_fail_test_2);
 }
 
+static int alloc_fail_3(void) {
+  return memory_test(alloc_fail_test_3);
+}
+
 /** URUCHAMIANIE TESTÓW **/
 
 typedef struct {
@@ -1066,8 +1365,10 @@ static const test_list_t test_list[] = {
   TEST(twelve_digits),
   TEST(cycle),
   TEST(sort),
+  TEST(get_reverse),
   TEST(alloc_fail_1),
   TEST(alloc_fail_2),
+  TEST(alloc_fail_3),
 };
 
 static int do_test(int (*function)(void)) {
